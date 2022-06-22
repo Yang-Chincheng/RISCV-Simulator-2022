@@ -1,3 +1,16 @@
+# Customed
+test/
+.vscode/
+CMakeFiles/
+data/
+!.gitkeep
+*.cmake
+CMakeCache.txt
+code
+MakeFile
+*.in
+*.dat
+
 # Prerequisites
 *.d
 
