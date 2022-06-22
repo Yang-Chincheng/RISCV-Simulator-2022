@@ -9,7 +9,7 @@
 riscv::Instruction ins;
 
 int main() {
-// freopen("./testcases_for_riscv/testcases/tak.data", "r", stdin);
+// freopen("./data/sample.data", "r", stdin);
     std::vector<riscv::inst_t> array;
     std::string buff;
     riscv::off_t offset;
