@@ -8,19 +8,17 @@
 
 namespace riscv {
 
-using Bit = unsigned char;
-using Byte = unsigned char;
-using Word = unsigned int;
-using Hfword = unsigned short;
+using inst_t = u_int32_t;
+using Word = u_int32_t;
+using Hfword = u_int16_t;
+using Byte = u_int8_t;
 
-using off_t = unsigned;
-using addr_t = unsigned;
-using inst_t = Word;
-using imm_t = Word;
-using opc_t = Byte;
 using rd_t = Byte;
 using rs_t = Byte;
+using imm_t = Word;
+using opc_t = Byte;
 using func_t = Byte;
+using addr_t = Word;
 
 void append_inst(std::string &line, std::vector<inst_t> &arr) {
     std::stringstream ss(line);

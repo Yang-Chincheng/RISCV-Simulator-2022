@@ -3,6 +3,7 @@
 
 #include "bus.h"
 #include "utils.h"
+#include "inst.h"
 #include "register.h"
 
 namespace riscv {
@@ -20,6 +21,8 @@ public:
         switch(opt) {
             case NONE:
                 return 0; 
+            case LUI: case AUIPC:
+            case JAL: case JALR:
             case ADD: case ADDI:
                 return opd1 + opd2;
             case SUB: 
@@ -39,10 +42,10 @@ public:
                 return signed(opd1) >> opd2;
             case SLT: case SLTI: 
             case BLT: case BGE:
-                return signed(opd1) < signed(opd2);
+                return signed(opd1) < signed(opd2)? 1: 0;
             case SLTU: case SLTIU: 
             case BLTU: case BGEU:
-                return unsigned(opd1) < unsigned(opd2);
+                return unsigned(opd1) < unsigned(opd2)? 1: 0;
             default:
                 return -1;
         }

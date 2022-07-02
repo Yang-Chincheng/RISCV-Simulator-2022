@@ -22,20 +22,38 @@ using func_t = byte;
 template <typename T>
 class Sequential {
 protected:
-    bool blocked;
+    // bool flag;
     T cur, nex;
     T& cur_stat() {return cur; }
     T& nex_stat() {return nex; }
 
 public:
-    bool busy() {return blocked; }
-    bool ready() {return !blocked; }
-    void stall() {blocked = 1; }
-    void resume() {blocked = 0; }
-    void tick() {
-        if(!blocked) cur = nex; 
-    }
+    Sequential(): cur(), nex() {}
+    // bool stalled() {return flag; }
+    // void stall(bool stat) {flag = stat; }
+    void tick() {cur = nex; }
 
+};
+
+class Stall: public Sequential <bool> {
+public:
+    void init(bool flag) {
+        this->cur_stat() = this->nex_stat() = flag;
+    }
+    void set(bool flag) {
+        if(flag) this->cur_stat() = 1;
+        this->nex_stat() = flag;
+    }
+    bool get() {return this->cur_stat(); }
+};
+
+struct Counter: public Sequential<int> {
+public:
+    void init(int x) {this->cur_stat() = this->nex_stat() = x; }
+    void inc() {this->nex_stat()++; }
+    void dec() {this->nex_stat()--; }
+    void set(int x) {this->nex_stat() = x; }
+    int count() {return this->cur_stat(); }
 };
 
 template <typename T, size_t MAX_LEN = 32>
@@ -48,25 +66,39 @@ protected:
 public:
     Queue(): len(0), head(0), tail(0) {}
     
-    void push(const T &ele) {
+    int allocate() {
+        if(len >= MAX_LEN - 1) return -1;
         tail = (tail + 1) % MAX_LEN;
-        que[tail] = ele, len++;
+        len++; return tail;
+    }
+    void push(const T &ele) {
+        int pos = allocate();
+        if(~pos) que[pos] = ele;
     }
     void pop() {
         head = (head + 1) % MAX_LEN;
         len--;
     }
-    T front() {
+    T& front() {
         return que[(head + 1) % MAX_LEN];
     }
 
+    int begin() {return (head + 1) % MAX_LEN; }
+    int end() {return (tail + 1) % MAX_LEN; }
+    int next(int idx) {return (idx + 1) % MAX_LEN; }
+
+    bool inque(int pos) {
+        if(!len) return 0;
+        if(tail > head && (pos <= head || pos > tail)) return 0; 
+        if(tail < head && (pos > tail && pos <= head)) return 0;
+        return 1;
+    }
     void clear() {len = head = tail = 0; }
     bool empty() {return len == 0; }
-    bool full() {return len == MAX_LEN; }
+    bool full() {return len >= MAX_LEN - 1; }
     int length() {return len; }
 
-    T& at(int idx) {return que[idx]; }
-    T& operator [] (int idx) {return que[(head + idx) % MAX_LEN]; }
+    T& operator [] (int idx) {return que[idx]; }
 
 };
 
@@ -74,82 +106,72 @@ template <typename T, size_t MAX_LEN = 32>
 class List {
 protected:
     int size;
-    int last;
     T list[MAX_LEN];
-    int pre[MAX_LEN];
-
-    class iterator;
-    friend class iterator;
+    bool flag[MAX_LEN];
 
 public:
     List() {
-        size = 0, last = -1;
-        for(int i = 0; i < MAX_LEN; ++i) pre[i] = -1; 
+        size = 0;
+        for(int i = 1; i < MAX_LEN; ++i) flag[i] = 0;
     }
 
-    int insert(const T &ele) {
-        if(size == MAX_LEN) return -1;
-        for(int i = 0; i < MAX_LEN; ++i) {
-            if(pre[i] == -1) {
-                list[i] = ele;
-                pre[i] = last, last = i;
-                size++;
-                return i;
+    int allocate() {
+        for(int i = 1; i < MAX_LEN; ++i) {
+            if(!flag[i]) {
+                flag[i] = 1; 
+                size++; return i;
             }
         }
         return -1;
+    }
+    int deallocate(int pos) {
+        if(!flag[pos]) return 0;
+        flag[pos] = 0, size--; return 1;
     }
 
     int length() {return size; }
     bool empty() {return size == 0; }
-    bool full() {return size == MAX_LEN; }
-
+    bool full() {return size >= MAX_LEN - 1; }
     void clear() {
-        size = 0, last = -1;
-        for(int i = 0; i < MAX_LEN; ++i) pre[i] = -1;
+        size = 0;
+        for(int i = 1; i < MAX_LEN; ++i) flag[i] = 0;
     }
 
-    T& at(int idx) {return list[idx]; }
-    T& operator [] (int idx) {
-        int pos = last;
-        for(int i = 0; i < idx; ++i) pos = pre[pos];
-        return list[pos];
-    }
-    
-    class iterator {
-    private:
-        friend List;
-        int idx;
-    public:
-        iterator(): idx(-1) {}
-        iterator(int _idx): idx(_idx) {}
-        iterator& operator ++ () {idx = pre[idx]; }
-        T& operator * () const {return list[idx]; }
-        T* operator -> () const {return list + idx; }
-        bool operator == (const iterator &o) const {idx == o.idx; }
-        bool operator != (const iterator &o) const {idx != o.idx; }
-    };
-
-    iterator begin() {return iterator(last); }
-    iterator end() {return iterator(-1); }
-
-    int remove(iterator iter) {
-        int idx = iter.idx;
-        if(idx == last) {
-            size--;
-            last = pre[last];
-            return last;
-        }
-        for(int i = last; i != -1; i = pre[i]) {
-            if(pre[i] == idx) {
-                pre[i] = pre[pre[i]];
-                size--;
-                return pre[i];
-            }
+    int next(int pos) {
+        for(int i = pos + 1; i < MAX_LEN; ++i) {
+            if(flag[i]) return i;
         }
         return -1;
     }
 
+    bool inlist(int pos) {
+        return flag[pos];
+    }
+    T& operator [] (int idx) {return list[idx]; }
+
+};
+
+template <typename T, size_t MAX_LEN = 32>
+class SeqQueue: public Sequential< Queue<T, MAX_LEN> > {
+public:
+    void push(const T &node) {
+        this->nex_stat().push(node);
+    }
+    void pop() {
+        this->nex_stat().pop();
+    }
+    T front() {
+        return this->cur_stat().front();
+    }
+    bool empty() {
+        return this->cur_stat().empty();
+    }
+    bool full() {
+        return this->cur_stat().full();
+    }
+    void flush() {
+        this->nex_stat().clear();
+    }
 };
 
 }

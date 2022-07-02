@@ -42,12 +42,12 @@ private:
         x[rd].write(tmp + 4);
         pc.write(tmp + sext(imm, J_IMM_LEN));
 //std::cerr << "[JAL] " << std::hex << unsigned(rd) << " " << imm << std::endl;
-    } 
+    }
     // [I] Jump and Link Register    
     // t = pc+4; pc=(x[rs1]+sext(offset))&~1; x[rd]=t
     void JALR(rd_t rd, rs_t rs1, imm_t imm) {
         Word tmp = pc.read() + 4;
-        pc.write((x[rs1].read() + sext(imm, J_IMM_LEN)) & ~1u);
+        pc.write((x[rs1].read() + sext(imm, I_IMM_LEN)) & ~1u);
         x[rd].write(tmp);
 //std::cerr << "[JALR] " << std::hex << unsigned(rd) << " " << unsigned(rs1) << " " << imm << std::endl;
     }
@@ -345,7 +345,7 @@ public:
         pc.write(offset);
 
 int cnt = 100;
-
+int tot = 0;
         while(1) {
 //std::cerr << ">> now pc: " << pc.read() << std::endl; 
             inst_t inst = mem.read_word(pc.read());
@@ -431,8 +431,18 @@ int cnt = 100;
                 else if(funct3 == 0x6) OR(rd, rs1, rs2);
                 else if(funct3 == 0x7) AND(rd, rs1, rs2);
             }
+tot++;
+// std::cout << "[commit code] " << std::setw(8) << std::setfill('0') << std::hex << Word(inst) << " #" << std::dec << tot << std::endl;
+// // std::cout << "[pc] " << std::setw(8) << std::setfill('0') << std::hex << Word(pc.read()) << std::endl;
+
+// for(int i = 0; i < 4; ++i) {
+//     for(int j = 0; j < 8; ++j) std::cout << std::setw(8) << std::setfill('0') << std::hex << Word(x[i*8+j].read()) << " ";
+//     std::cout << std::endl;
+// }
+// std::cout << std::hex << std::setw(8) << std::setfill('0') << mem.read_word(4572) << std::endl;
+
         }
-        std::cout << (x[10].read() & 255u) << std::endl;
+        std::cout << std::dec << (x[10].read() & 255u) << std::endl;
     }
 
 };

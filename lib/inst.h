@@ -2,6 +2,7 @@
 #define __RISCV_SIMULATOR_INST_H__
 
 #include "utils.h"
+#include <string>
 
 namespace riscv {
 
@@ -24,7 +25,7 @@ enum RV32I_Opt {
 
     STORE_BEG = 64,
         SB, SH, SW,
-    STOER_END,
+    STORE_END,
 
     IMM_BEG = 80,
         ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI, 
@@ -36,6 +37,49 @@ enum RV32I_Opt {
     
 };
 
+std::string opt_to_string(RV32I_Opt opt) {
+    switch(opt) {
+        case LUI: return "lui";
+        case AUIPC: return "auipc";
+        case JAL: return "jal";
+        case JALR: return "jalr";
+        case BEQ: return "beq";
+        case BNE: return "bne";
+        case BLT: return "blt";
+        case BGE: return "bge";
+        case BLTU: return "bltu";
+        case BGEU: return "bgeu";
+        case LB: return "lb";
+        case LH: return "lh";
+        case LW: return "lw";
+        case LBU: return "lbu";
+        case LHU: return "lhu";
+        case SB: return "sb";
+        case SH: return "sh";
+        case SW: return "sw";
+        case ADDI: return "addi";
+        case SLTI: return "slti";
+        case SLTIU: return "sltiu";
+        case XORI: return "xori";
+        case ORI: return "ori";
+        case ANDI: return "andi";
+        case SLLI: return "slli";
+        case SRLI: return "srli";
+        case SRAI: return "srai";
+        case ADD: return "add";
+        case SUB: return "sub";
+        case SLL: return "sll";
+        case SLT: return "slt";
+        case SLTU: return "sltu";
+        case SRL: return "srl";
+        case SRA: return "sra";
+        case XOR: return "xor";
+        case OR: return "or";
+        case AND: return "and";
+        default: return "none"; 
+    }
+}
+
 class Decoder {
 public:
     inst_t org;
@@ -46,7 +90,18 @@ public:
 
     char type;
     RV32I_Opt opt;
-    word opd0, opd1, opd2;
+
+    static word sext(word data, int len = 32) {
+        if(len == 32) return data;
+        word mask = 0xffffffff >> len << len;
+        word ext = (data >> (len - 1) & 1? mask: 0);
+        return data & (~mask) | ext;
+    }
+
+    static inst_t slice(inst_t inst, int lb, int rb) {
+        if(rb < 32) inst &= (1u << rb) - 1;
+        return inst >> lb;
+    }
 
 private:
     const static int I_IMM_LEN = 12;
@@ -60,17 +115,6 @@ private:
     const static int FUN3_LEN = 3;
     const static int FUN7_LEN = 7;
 
-    static word sext(word data, int len = 32) {
-        if(len == 32) return data;
-        word mask = 0xffffffff >> len << len;
-        word ext = (data >> (len - 1) & 1? mask: 0);
-        return data & (~mask) | ext;
-    }
-
-    static inst_t slice(inst_t inst, int lb, int rb) {
-        if(rb < 32) inst &= (1u << rb) - 1;
-        return inst >> lb;
-    }
 
     static opc_t get_opcode(inst_t inst) {
         return slice(inst, 0, 7);
@@ -125,37 +169,34 @@ private:
 public:
     void decode(inst_t inst) {
         org = inst;
-        if(inst == 0x0ff00513) {
-            opt = HALT; return ;
-        }
         opc = get_opcode(inst);
         switch(opc) {
             case 0x37:
                 opt = LUI, type = 'U';
-                opd0 = rd = get_rd(inst);
-                opd1 = imm = get_imm_U(inst);
+                rd = get_rd(inst);
+                imm = get_imm_U(inst);
                 break;
             case 0x17:
                 opt = AUIPC, type = 'U';
-                opd0 = rd = get_rd(inst);
-                opd1 = imm = get_imm_U(inst);
+                rd = get_rd(inst);
+                imm = get_imm_U(inst);
                 break;
             case 0x6f:
                 opt = JAL, type = 'J';
-                opd0 = rd = get_rd(inst);
-                opd1 = imm = get_imm_J(inst);
+                rd = get_rd(inst);
+                imm = get_imm_J(inst);
                 break;
             case 0x67:
                 opt = JALR, type = 'I';
-                opd0 = rd = get_rd(inst);
-                opd1 = rs1 = get_rs1(inst);
-                opd2 = imm = get_imm_I(inst);
+                rd = get_rd(inst);
+                rs1 = get_rs1(inst);
+                imm = get_imm_I(inst);
                 break;
             case 0x63:
                 type = 'B';
-                opd1 = rs1 = get_rs1(inst);
-                opd1 = rs2 = get_rs2(inst);
-                opd0 = imm = get_imm_B(inst);
+                rs1 = get_rs1(inst);
+                rs2 = get_rs2(inst);
+                imm = get_imm_B(inst);
                 funct3 = get_funct3(inst);
                 switch(funct3) {
                     case 0x0: opt = BEQ; break;
@@ -168,9 +209,9 @@ public:
                 break;
             case 0x03:
                 type = 'I';
-                opd0 = rd = get_rd(inst);
-                opd1 = rs1 = get_rs1(inst);
-                opd2 = imm = get_imm_I(inst);
+                rd = get_rd(inst);
+                rs1 = get_rs1(inst);
+                imm = get_imm_I(inst);
                 funct3 = get_funct3(inst);
                 switch(funct3) {
                     case 0x0: opt = LB; break;
@@ -182,9 +223,9 @@ public:
                 break;
             case 0x23:
                 type = 'S';
-                opd1 = rs1 = get_rs1(inst);
-                opd2 = rs2 = get_rs2(inst);
-                opd0 = imm = get_imm_S(inst);
+                rs1 = get_rs1(inst);
+                rs2 = get_rs2(inst);
+                imm = get_imm_S(inst);
                 funct3 = get_funct3(inst);
                 switch(funct3) {
                     case 0x0: opt = SB; break;
@@ -194,50 +235,50 @@ public:
                 break;
             case 0x13:
                 funct3 = get_funct3(inst);
-                opd0 = rd = get_rd(inst);
-                opd1 = rs1 = get_rs1(inst);
+                rd = get_rd(inst);
+                rs1 = get_rs1(inst);
                 switch(funct3) {
                     case 0x0:
                         opt = ADDI, type = 'I';
-                        opd2 = imm = get_imm_I(inst);
+                        imm = get_imm_I(inst);
                         break;
                     case 0x1:
                         opt = SLLI, type = 'I';
-                        opd2 = imm = get_imm_I(inst);
+                        imm = get_imm_I(inst);
                         break;
                     case 0x2: 
                         opt = SLTI, type = 'S';
-                        opd2 = imm = get_imm_S(inst);
+                        imm = get_imm_S(inst);
                         break;
                     case 0x3:
                         opt = SLTIU, type = 'S';
-                        opd2 = imm = get_imm_S(inst);
+                        imm = get_imm_S(inst);
                         break;
                     case 0x4:
                         opt = XORI, type = 'I';
-                        opd2 = imm = get_imm_I(inst);
+                        imm = get_imm_I(inst);
                         break;
                     case 0x5:
                         type = 'I';
-                        opd2 = imm = get_imm_I(inst);
+                        imm = get_imm_I(inst);
                         funct7 = get_funct7(inst);
                         opt = funct7? SRAI: SRLI;
                         break;
                     case 0x6:
                         opt = ORI, type = 'I';
-                        opd2 = imm = get_imm_I(inst);
+                        imm = get_imm_I(inst);
                         break;
                     case 0x7:
                         opt = ANDI, type = 'I';
-                        opd2 = imm = get_imm_I(inst);
+                        imm = get_imm_I(inst);
                         break;
                 }
                 break;
             case 0x33:
                 type = 'R';
-                opd0 = rd = get_rd(inst);
-                opd1 = rs1 = get_rs1(inst);
-                opd2 = rs2 = get_rs2(inst);
+                rd = get_rd(inst);
+                rs1 = get_rs1(inst);
+                rs2 = get_rs2(inst);
                 funct3 = get_funct3(inst);
                 switch(funct3) {
                     case 0x0:
@@ -257,7 +298,7 @@ public:
                 }
                 break;
             default:
-                opt = NONE;
+                opt = NONE, type = 'N';
                 break;
         }
     }
