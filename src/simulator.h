@@ -257,7 +257,8 @@ class Speculation {
 private:
     const static int HASH_SIZE = 4096; 
     byte table[4][HASH_SIZE];
-    byte history[HASH_SIZE];
+    byte h;
+    // byte history[HASH_SIZE];
     int total;
     int success;
 
@@ -269,21 +270,25 @@ public:
     Speculation() {
         total = success = 0;
         memset(table, 2, sizeof(table));
-        memset(history, 0, sizeof(history));
+        h = 0;
+        // memset(history, 0, sizeof(history));
     }
 
     bool predict(addr_t pc) {
         byte key = hash(pc);
-        return table[history[key]][key] >= 2;
+        return table[h][key] >= 2;
+        // return table[history[key]][key] >= 2;
     }
 
     void feedback(addr_t pc, bool jump, bool mis) {
         if(!mis) success++; total++;
-        byte key = hash(pc); 
-        byte &tab = table[history[key]][key];
+        byte key = hash(pc);
+        byte &tab = table[h][key]; 
+        // byte &tab = table[history[key]][key];
         if(jump) tab < 3? tab++: 0;
         else tab > 0? tab--: 0;
-        history[key] = (history[key] << 1 | jump) & 3;
+        h = (h << 1 | jump) & 3;
+        // history[key] = (history[key] << 1 | jump) & 3;
     }
 
     double success_rate() {
