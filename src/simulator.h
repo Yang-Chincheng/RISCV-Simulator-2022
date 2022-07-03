@@ -268,7 +268,7 @@ private:
 public:
     Speculation() {
         total = success = 0;
-        memset(table, 0, sizeof(table));
+        memset(table, 2, sizeof(table));
         memset(history, 0, sizeof(history));
     }
 
@@ -754,7 +754,7 @@ int cnt = 10000;
 //                 }
 //             }
         }
-        // std::cout << std::dec << std::setprecision(4) << spec.success_rate() << std::endl;
+        std::cerr << std::dec << std::setprecision(4) << spec.success_rate() << std::endl;
         std::cout << std::dec << (regfile.read(10) & 255u) << std::endl;
     }
 
