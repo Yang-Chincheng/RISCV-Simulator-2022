@@ -780,7 +780,7 @@ int cnt = 10000;
 //                 }
 //             }
         }
-        std::cerr << std::dec << std::setprecision(4) << spec.accuracy() << std::endl;
+        // std::cerr << std::dec << std::setprecision(4) << spec.accuracy() << std::endl;
         std::cout << std::dec << (regfile.read(10) & 255u) << std::endl;
     }
 
