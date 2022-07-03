@@ -256,43 +256,64 @@ struct InstQue_node {
 class Speculation {
 private:
     const static int HASH_SIZE = 4096; 
-    byte table[4][HASH_SIZE];
-    byte h;
-    // byte history[HASH_SIZE];
+    byte BHT[HASH_SIZE];
+    byte BPHT[4][HASH_SIZE];
+    byte GHR;
+    byte GPHT[8][HASH_SIZE];
+    byte CPHT[8][HASH_SIZE];
+
     int total;
-    int success;
+    int correct;
 
     word hash(addr_t pc) {
         return ((pc >> 12) ^ (pc >> 2)) & 0xfff;
     }
 
+    static void inc(byte &stat) {
+        if(stat < 3) stat++;
+    }
+    static void dec(byte &stat) {
+        if(stat > 0) stat--;
+    }
+
 public:
     Speculation() {
-        total = success = 0;
-        memset(table, 2, sizeof(table));
-        h = 0;
-        // memset(history, 0, sizeof(history));
+        total = correct = 0;
+        GHR = 0;
+        memset(BHT, 0, sizeof(BHT));
+        memset(GPHT, 0, sizeof(GPHT));
+        memset(BPHT, 0, sizeof(BPHT));
+        memset(CPHT, 0, sizeof(CPHT));
     }
 
     bool predict(addr_t pc) {
-        byte key = hash(pc);
-        return table[h][key] >= 2;
-        // return table[history[key]][key] >= 2;
+        word key = hash(pc);
+        // #1 global prediction
+        // return GPHT[GHR][key] >= 2;
+        // #2 local prediction
+        // return GPHT[BHT[key]][key] >= 2;
+        // #3 competitive predition
+        if(CPHT[GHR][key] >= 2) return GPHT[GHR][key] >= 2;
+        else return BPHT[BHT[key]][key] >= 2;
     }
 
     void feedback(addr_t pc, bool jump, bool mis) {
-        if(!mis) success++; total++;
-        byte key = hash(pc);
-        byte &tab = table[h][key]; 
-        // byte &tab = table[history[key]][key];
-        if(jump) tab < 3? tab++: 0;
-        else tab > 0? tab--: 0;
-        h = (h << 1 | jump) & 3;
-        // history[key] = (history[key] << 1 | jump) & 3;
+        if(!mis) correct++; total++;
+        word key = hash(pc);
+        bool p1 = (GPHT[GHR][key] >= 2) == jump;
+        bool p2 = (BPHT[BHT[key]][key] >= 2) == jump;
+        if(p1 != p2) {
+            if(p1) inc(CPHT[GHR][key]);
+            if(p2) dec(CPHT[GHR][key]);
+        }
+        if(jump) inc(GPHT[GHR][key]), inc(BPHT[BHT[key]][key]);
+        else dec(GPHT[GHR][key]), dec(BPHT[BHT[key]][key]);
+        GHR = ((GHR << 1) | jump) & 7;
+        BHT[key] = ((BHT[key] << 1) | jump) & 3;
     }
 
-    double success_rate() {
-        if(total) return 1.0 * success / total;
+    double accuracy() {
+        if(total) return 1.0 * correct / total;
         else return 1.0;
     }
 
@@ -759,7 +780,7 @@ int cnt = 10000;
 //                 }
 //             }
         }
-        std::cerr << std::dec << std::setprecision(4) << spec.success_rate() << std::endl;
+        std::cerr << std::dec << std::setprecision(4) << spec.accuracy() << std::endl;
         std::cout << std::dec << (regfile.read(10) & 255u) << std::endl;
     }
 
