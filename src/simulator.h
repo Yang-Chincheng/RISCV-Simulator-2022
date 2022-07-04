@@ -314,6 +314,9 @@ public:
         BHT[key] = ((BHT[key] << 1) | jump) & 3;
     }
 
+    int total_predict() {return total; }
+    int correct_predict() {return correct; }
+
     double accuracy() {
         if(total) return 1.0 * correct / total;
         else return 1.0;
@@ -816,6 +819,7 @@ public:
         std::cerr << std::dec << inst_num << std::endl;
         std::cerr << std::dec << cycle << std::endl;
         std::cerr << std::dec << std::setprecision(4) << spec.accuracy() << std::endl;
+        std::cerr << std::dec << spec.total_predict() << std::endl;
         std::cout << std::dec << (regfile.read(10) & 255u) << std::endl;
     }
 
