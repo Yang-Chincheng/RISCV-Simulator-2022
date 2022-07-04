@@ -6,7 +6,9 @@
 
 namespace riscv {
 
-template <size_t MEM_SIZE>
+const int DEFAULT_MEM_SIZE = 5e5;
+
+template <size_t MEM_SIZE = DEFAULT_MEM_SIZE>
 class RAM {
 private:
     byte mem[MEM_SIZE];
@@ -39,6 +41,10 @@ public:
         mem[addr + 2] = data >> 16 & 255;
         mem[addr + 3] = data >> 24 & 255;
     }
+
+    // byte* memptr(addr_t addr) {
+    //     return mem + addr;
+    // }
 
 };
 

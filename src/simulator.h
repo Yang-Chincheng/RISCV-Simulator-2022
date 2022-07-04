@@ -6,6 +6,7 @@
 #include "../lib/register.h"
 #include "../lib/inst.h"
 #include "../lib/ram.h"
+#include "../lib/cache.h"
 #include "../lib/utils.h"
 #include <tuple>
 #include <sstream>
@@ -120,17 +121,17 @@ public:
         auto &item = cque.front();
         if(item.ready()) {
             if(item.opt > LOAD_BEG && item.opt < LOAD_END) {
-                if(!load.pending() && cnt == 0) {
-                    this->nex_stat().pop(); return &item;
-                }
+                if(!load.pending() && cnt == 0) return &item;
             }
             else {
-                if(!store.pending()) {
-                    this->nex_stat().pop(); return &item;
-                }
+                if(!store.pending()) return &item;
             }
         }
         return nullptr;
+    }
+
+    void pop() {
+        this->nex_stat().pop();
     }
     
     void update(byte idx, word data) {
@@ -206,11 +207,12 @@ public:
     const ROB_item* commit() {
         if(this->cur_stat().empty()) return nullptr;
         auto &item = this->cur_stat().front();
-        if(item.cnt == 0) {
-            this->nex_stat().pop();
-            return &item;
-        }
+        if(item.cnt == 0) return &item;
         return nullptr;
+    }
+
+    void pop() {
+        this->nex_stat().pop();
     }
 
     void update(byte idx, word data, addr_t addr) {
@@ -256,38 +258,64 @@ struct InstQue_node {
 class Speculation {
 private:
     const static int HASH_SIZE = 4096; 
-    byte table[4][HASH_SIZE];
-    byte history[HASH_SIZE];
+    byte BHT[HASH_SIZE];
+    byte BPHT[4][HASH_SIZE];
+    byte GHR;
+    byte GPHT[8][HASH_SIZE];
+    byte CPHT[8][HASH_SIZE];
+
     int total;
-    int success;
+    int correct;
 
     word hash(addr_t pc) {
         return ((pc >> 12) ^ (pc >> 2)) & 0xfff;
     }
 
+    static void inc(byte &stat) {
+        if(stat < 3) stat++;
+    }
+    static void dec(byte &stat) {
+        if(stat > 0) stat--;
+    }
+
 public:
     Speculation() {
-        total = success = 0;
-        memset(table, 0, sizeof(table));
-        memset(history, 0, sizeof(history));
+        total = correct = 0;
+        GHR = 0;
+        memset(BHT, 0, sizeof(BHT));
+        memset(GPHT, 0, sizeof(GPHT));
+        memset(BPHT, 0, sizeof(BPHT));
+        memset(CPHT, 0, sizeof(CPHT));
     }
 
     bool predict(addr_t pc) {
-        byte key = hash(pc);
-        return table[history[key]][key] >= 2;
+        word key = hash(pc);
+        // #1 global prediction
+        // return GPHT[GHR][key] >= 2;
+        // #2 local prediction
+        // return GPHT[BHT[key]][key] >= 2;
+        // #3 competitive predition
+        if(CPHT[GHR][key] >= 2) return GPHT[GHR][key] >= 2;
+        else return BPHT[BHT[key]][key] >= 2;
     }
 
     void feedback(addr_t pc, bool jump, bool mis) {
-        if(!mis) success++; total++;
-        byte key = hash(pc); 
-        byte &tab = table[history[key]][key];
-        if(jump) tab < 3? tab++: 0;
-        else tab > 0? tab--: 0;
-        history[key] = (history[key] << 1 | jump) & 3;
+        if(!mis) correct++; total++;
+        word key = hash(pc);
+        bool p1 = (GPHT[GHR][key] >= 2) == jump;
+        bool p2 = (BPHT[BHT[key]][key] >= 2) == jump;
+        if(p1 != p2) {
+            if(p1) inc(CPHT[GHR][key]);
+            if(p2) dec(CPHT[GHR][key]);
+        }
+        if(jump) inc(GPHT[GHR][key]), inc(BPHT[BHT[key]][key]);
+        else dec(GPHT[GHR][key]), dec(BPHT[BHT[key]][key]);
+        GHR = ((GHR << 1) | jump) & 7;
+        BHT[key] = ((BHT[key] << 1) | jump) & 3;
     }
 
-    double success_rate() {
-        if(total) return 1.0 * success / total;
+    double accuracy() {
+        if(total) return 1.0 * correct / total;
         else return 1.0;
     }
 
@@ -311,9 +339,10 @@ private:
     Decoder decoder;
     Bus<CDB_msg> cdb;
 
-    RAM<MEM_SIZE> ram; 
-    Delay<CDB_msg, 3> load_delay;
-    Delay<Store_msg, 3> store_delay; 
+    RAM<MEM_SIZE> ram;
+    Cache cache;
+    // Delay<CDB_msg, 3> load_delay;
+    // Delay<Store_msg, 3> store_delay; 
     
     Speculation spec;
 
@@ -323,7 +352,6 @@ private:
     Adder addr_adder;
     CDB_reg alu_out;
     CDB_reg store_out;
-    // CDB_reg addrout;
     CDB_reg load_out;
     Stall stall;
 
@@ -506,12 +534,22 @@ private:
                 if(item->opt > LOAD_BEG && item->opt < LOAD_END) {
                     word res;
                     switch(item->opt) {
-                        case LB: res = 0; break;
-                        case LH: res = 1; break;
-                        case LW: res = 2; break;
-                        case LBU: res = 3; break;
-                        case LHU: res = 4; break;
-                    }
+                        case LB: case LBU: 
+                            if(!cache.hit_byte(addr)) return ;
+                            res = cache.read_byte(addr);
+                            break;
+                        case LH: case LHU:
+                            if(!cache.hit_hfword(addr)) return ;
+                            res = cache.read_hfword(addr);
+                            break;
+                        case LW: 
+                            if(!cache.hit_word(addr)) return ;
+                            res = cache.read_word(addr);
+                            break;
+                    } 
+                    load_out.write(CDB_msg(item->ROBidx, res, addr));
+                    load_out.pend(1);
+                    send_que.push(&load_out);
                     // switch(item->opt) {
                     //     case LB: res = Decoder::sext(ram.read_byte(addr), 8); break;
                     //     case LH: res = Decoder::sext(ram.read_hfword(addr), 16); break;
@@ -519,8 +557,8 @@ private:
                     //     case LBU: res = ram.read_byte(addr); break;
                     //     case LHU: res = ram.read_hfword(addr); break;
                     // }
-                    load_delay.input(Load_msg(item->opt, item->ROBidx, addr));
-                    load_out.pend(1);
+                    // load_delay.input(Load_msg(item->opt, item->ROBidx, addr));
+                    // load_out.pend(1);
                 }
                 else {
                     store_cnt.inc();
@@ -528,6 +566,7 @@ private:
                     store_out.pend(1);
                     send_que.push(&store_out);
                 }
+                slb.pop();
             }
         }
     }
@@ -546,33 +585,33 @@ private:
                 send_que.pop();
             }
         }
-        if(store_delay.signaled()) {
-            auto out = store_delay.output();
-            auto opt = std::get<0>(out);
-            auto data = std::get<1>(out);
-            auto addr = std::get<2>(out);
-            switch(opt) {
-                case SB: ram.write_byte(addr, data); break;
-                case SH: ram.write_hfword(addr, data); break;
-                case SW: ram.write_word(addr, data); break;
-            }
-        }
-        if(load_delay.signaled()) {
-            auto out = load_delay.output();
-            auto opt = std::get<0>(out);
-            auto idx = std::get<1>(out);
-            auto addr = std::get<2>(out);
-            word data = 0;
-            switch(opt) {
-                case LB: data = Decoder::sext(ram.read_byte(addr), 8); break;
-                case LH: data = Decoder::sext(ram.read_hfword(addr), 16); break;
-                case LW: data = ram.read_word(addr); break;
-                case LBU: data = ram.read_byte(addr); break;
-                case LHU: data = ram.read_hfword(addr); break;
-            }
-            load_out.write(CDB_msg(idx, data, addr));
-            send_que.push(&load_out);
-        }
+        // if(store_delay.signaled()) {
+        //     auto out = store_delay.output();
+        //     auto opt = std::get<0>(out);
+        //     auto data = std::get<1>(out);
+        //     auto addr = std::get<2>(out);
+        //     switch(opt) {
+        //         case SB: ram.write_byte(addr, data); break;
+        //         case SH: ram.write_hfword(addr, data); break;
+        //         case SW: ram.write_word(addr, data); break;
+        //     }
+        // }
+        // if(load_delay.signaled()) {
+        //     auto out = load_delay.output();
+        //     auto opt = std::get<0>(out);
+        //     auto idx = std::get<1>(out);
+        //     auto addr = std::get<2>(out);
+        //     word data = 0;
+        //     switch(opt) {
+        //         case LB: data = Decoder::sext(ram.read_byte(addr), 8); break;
+        //         case LH: data = Decoder::sext(ram.read_hfword(addr), 16); break;
+        //         case LW: data = ram.read_word(addr); break;
+        //         case LBU: data = ram.read_byte(addr); break;
+        //         case LHU: data = ram.read_hfword(addr); break;
+        //     }
+        //     load_out.write(CDB_msg(idx, data, addr));
+        //     send_que.push(&load_out);
+        // }
     }
 
     int commit() {
@@ -597,12 +636,28 @@ private:
                 flush_flag = 1;
                 jump_to = item->mis_pc;
             }
+            rob.pop();
             return org_inst;
         }
         // Store
         if(item->opt > STORE_BEG && item->opt < STORE_END) {
+            switch(item->opt) {
+                case SB: 
+                    if(!cache.hit_byte(item->addr)) return 0;
+                    cache.write_byte(item->addr, item->data);
+                    break;
+                case SH:
+                    if(!cache.hit_hfword(item->addr)) return 0;
+                    cache.write_hfword(item->addr, item->data);
+                    break;
+                case SW:
+                    if(!cache.hit_word(item->addr)) return 0;
+                    cache.write_word(item->addr, item->data);
+                    break;
+            }
             store_cnt.dec();
-            store_delay.input(Store_msg(item->opt, item->data, item->addr));
+            rob.pop();
+            // store_delay.input(Store_msg(item->opt, item->data, item->addr));
             return org_inst;
         }
         // Jump
@@ -613,10 +668,11 @@ private:
             stall.set(0);
         }
         else write_data = item->data;
-        // Ohters
+        // Others
         auto rd = item->dest;
         regfile.write(rd, write_data);
         regfile.reset(rd, item->idx);
+        rob.pop();
         return org_inst;
     }
 
@@ -629,10 +685,11 @@ private:
             regfile.flush(), inst_que.flush(), send_que.flush();
             cdb.flush(), alu_out.flush(), store_out.flush(), load_out.flush();
             // addrout.flush(),
-            load_delay.flush();
+            // load_delay.flush();
             stall.set(0);
             flush_flag = 0;
         }
+        cache.tick();
         store_cnt.tick();
         stall.tick();
         pc.tick();
@@ -647,8 +704,8 @@ private:
         store_out.tick();
         // addrout.tick();
         load_out.tick();
-        load_delay.tick();
-        store_delay.tick();
+        // load_delay.tick();
+        // store_delay.tick();
     }
 
     void print() {
@@ -677,22 +734,22 @@ private:
         slb.print();
         std::cout << "[reorder buffer]\n";
         rob.print();
-        std::cout << "[store delay] ";
-        if(store_delay.signaled()) {
-            auto msg = store_delay.output();
-            std::cout << std::setw(5) << std::setfill(' ') << opt_to_string(std::get<0>(msg)) << " ";
-            std::cout << std::setw(8) << std::setfill('0') << std::hex << word(std::get<1>(msg)) << " ";
-            std::cout << std::setw(8) << std::setfill('0') << std::hex << word(std::get<2>(msg)) << "\n"; 
-        }
-        else std::cout << "no signal\n";
-        std::cout << "[ load delay] ";
-        if(load_delay.signaled()) {
-            auto msg = load_delay.output();
-            std::cout << "#" << std::setw(4) << std::setfill('0') << std::dec << word(std::get<0>(msg)) << " ";
-            std::cout << std::setw(8) << std::setfill('0') << std::hex << word(std::get<1>(msg)) << " ";
-            std::cout << std::setw(8) << std::setfill('0') << std::hex << word(std::get<2>(msg)) << "\n"; 
-        }
-        else std::cout << "no signal\n";
+        // std::cout << "[store delay] ";
+        // if(store_delay.signaled()) {
+        //     auto msg = store_delay.output();
+        //     std::cout << std::setw(5) << std::setfill(' ') << opt_to_string(std::get<0>(msg)) << " ";
+        //     std::cout << std::setw(8) << std::setfill('0') << std::hex << word(std::get<1>(msg)) << " ";
+        //     std::cout << std::setw(8) << std::setfill('0') << std::hex << word(std::get<2>(msg)) << "\n"; 
+        // }
+        // else std::cout << "no signal\n";
+        // std::cout << "[ load delay] ";
+        // if(load_delay.signaled()) {
+        //     auto msg = load_delay.output();
+        //     std::cout << "#" << std::setw(4) << std::setfill('0') << std::dec << word(std::get<0>(msg)) << " ";
+        //     std::cout << std::setw(8) << std::setfill('0') << std::hex << word(std::get<1>(msg)) << " ";
+        //     std::cout << std::setw(8) << std::setfill('0') << std::hex << word(std::get<2>(msg)) << "\n"; 
+        // }
+        // else std::cout << "no signal\n";
         std::cout << std::endl;
     }
 
@@ -702,6 +759,7 @@ private:
         pc.init(0);
         stall.init(0);
         store_cnt.init(0);
+        cache.bind(&ram);
     }
 
 public:
@@ -725,8 +783,9 @@ public:
     }
 
     void run() {
-int tot = 0;
-int cnt = 10000;
+        init();
+// int tot = 0;
+// int cnt = 1000000;
         inst_t code;
         while(1) {
             code = commit();
@@ -746,15 +805,17 @@ int cnt = 10000;
 //                     std::cout << std::dec << "#" << tot << std::endl;
 //                 }
 //                 cnt--;
-//                 if(code) {
+//                 if(inst_num >= 40000 && inst_num < 40040) {
 //                     // std::cout << "[pc] " << std::hex << std::setw(8) << std::setfill('0') << word(pc.read()) << std::endl;
-//                     regfile.print();
+//                     // regfile.print();
 //                     // std::cout << std::hex << std::setw(8) << std::setfill('0') << ram.read_word(0x12e4) << std::endl;
-//                     // print();
+//                     print();
 //                 }
 //             }
         }
-        // std::cout << std::dec << std::setprecision(4) << spec.success_rate() << std::endl;
+        std::cerr << std::dec << inst_num << std::endl;
+        std::cerr << std::dec << cycle << std::endl;
+        std::cerr << std::dec << std::setprecision(4) << spec.accuracy() << std::endl;
         std::cout << std::dec << (regfile.read(10) & 255u) << std::endl;
     }
 
