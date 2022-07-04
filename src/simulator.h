@@ -293,7 +293,7 @@ public:
         // #1 global prediction
         // return GPHT[GHR][key] >= 2;
         // #2 local prediction
-        // return GPHT[BHT[key]][key] >= 2;
+        // return BPHT[BHT[key]][key] >= 2;
         // #3 competitive predition
         if(CPHT[GHR][key] >= 2) return GPHT[GHR][key] >= 2;
         else return BPHT[BHT[key]][key] >= 2;
