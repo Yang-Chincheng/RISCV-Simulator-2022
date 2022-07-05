@@ -24,8 +24,8 @@ The simulator is based on RV32I ISA. Instructions supported are listed as follow
 | sh          | I    | Store Halfword                            |
 | sw          | I    | Store Word                                |
 | addi        | I    | Add Immediate                             |
-| slt         | I    | Set if Less Than Immediate                |
-| sltu        | I    | Set if Less Than Immediate, Unsigned      |
+| slti        | I    | Set if Less Than Immediate                |
+| sltiu       | I    | Set if Less Than Immediate, Unsigned      |
 | xori        | I    | Exclusive-OR Immediate                    |
 | ori         | I    | OR Immediate                              |
 | andi        | I    | And Immediate                             |
