@@ -30,11 +30,11 @@ The simulator is implemented with a mixture of combinational and sequential logi
 
 For speculation, three mechanisms derived from **two-level adaptive branch prediction** are used:
 
-+ a 3-bit **GAs**, or a two-level adaptive predictor with one 3-bit <u>global</u> history register and per-set pattern history tables
++ a 3-bit **GAs predictor**, or a two-level adaptive predictor with one 3-bit <u>global</u> history register and per-set pattern history tables
 
-+ a 2-bit **SAs**, or a two-level adaptive predictor with 2-bit <u>local</u> history tables and per-set pattern history tables
++ a 2-bit **SAs predictor**, or a two-level adaptive predictor with 2-bit <u>local</u> history tables and per-set pattern history tables
 
-+ a tournament predictor that combines GAs and SAs predictor, and adaptively selects one of their prediction results
++ a **tournament predictor** that combines GAs and SAs predictor, and adaptively <u>selects</u> one of their prediction results
 
 | testcase       | prediction number | global accuracy | local accuracy | tournament accuracy |
 | -------------- | ----------------- | --------------- | -------------- | ------------------- |
@@ -59,7 +59,7 @@ For speculation, three mechanisms derived from **two-level adaptive branch predi
 
 A 32KB direct mapping cache with 64B cache lines. 
 
-Only L1 data cache is implemented to speed up load and store operations.
+Only L1 data cache is implemented to accelerate load and store operations.
 
 | testcase       | cycles without cache | cycles with cache | Improvement |
 | -------------- | -------------------- | ----------------- | ----------- |
