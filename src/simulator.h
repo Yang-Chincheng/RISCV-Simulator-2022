@@ -793,9 +793,9 @@ public:
         while(1) {
             code = commit();
             write_result();
-            execute();
-            issue();
             fetch();
+            issue();
+            execute();
             if(code) inst_num++;
             if(code == 0x0ff00513) break;
             tick();
