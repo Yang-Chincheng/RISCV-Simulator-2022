@@ -20,12 +20,12 @@ The simulator is based on RV32I ISA. Instructions supported are listed as follow
 | lw          | I    | Load Word                                 |
 | lbu         | I    | Load Byte, Unsigned                       |
 | lhu         | I    | Load Halfword, Unsigned                   |
-| sb          | I    | Store Byte                                |
-| sh          | I    | Store Halfword                            |
-| sw          | I    | Store Word                                |
+| sb          | S    | Store Byte                                |
+| sh          | S    | Store Halfword                            |
+| sw          | S    | Store Word                                |
 | addi        | I    | Add Immediate                             |
-| slti        | I    | Set if Less Than Immediate                |
-| sltiu       | I    | Set if Less Than Immediate, Unsigned      |
+| slti        | S    | Set if Less Than Immediate                |
+| sltiu       | S    | Set if Less Than Immediate, Unsigned      |
 | xori        | I    | Exclusive-OR Immediate                    |
 | ori         | I    | OR Immediate                              |
 | andi        | I    | And Immediate                             |
